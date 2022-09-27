@@ -1,5 +1,5 @@
 use core::{
-    fmt::{self, Write},
+    fmt::{Arguments, Write},
     ops::{Deref, DerefMut},
 };
 use lazy_static::lazy_static;
@@ -30,12 +30,12 @@ macro_rules! print {
     };
 }
 
-pub fn _print(args: fmt::Arguments) {
+pub fn _print(args: Arguments) {
     let mut writer = WRITER.lock();
     writer.write_fmt(args).unwrap();
 }
 
-pub fn _println(args: fmt::Arguments) {
+pub fn _println(args: Arguments) {
     let mut writer = WRITER.lock();
     writer.write_fmt(args).unwrap();
     writer.write_byte(b'\n');
@@ -57,16 +57,6 @@ pub struct Writer {
 }
 
 impl Writer {
-    fn init() -> Self {
-        let mut result = Self {
-            row: 0,
-            column: 0,
-            color_code: ColorCode::new(Color::White, Color::Black),
-        };
-        result.clear();
-        result
-    }
-
     pub fn write_str(&mut self, s: &str) {
         for byte in s
             .bytes()
@@ -74,6 +64,10 @@ impl Writer {
         {
             self.write_byte(byte)
         }
+    }
+
+    pub fn write_char(&mut self, c: char) {
+        self.write_str(c.encode_utf8(&mut [0; 4]));
     }
 
     pub fn write_byte(&mut self, byte: u8) {
@@ -89,7 +83,7 @@ impl Writer {
                 let col = self.column;
 
                 let color = self.color_code;
-                Self::buffer().chars[row][col].write(ScreenChar { code_point, color });
+                self.buffer().chars[row][col].write(ScreenChar { code_point, color });
                 self.column += 1;
             }
         }
@@ -99,7 +93,17 @@ impl Writer {
         self.color_code = color_code;
     }
 
-    fn buffer() -> &'static mut Buffer {
+    fn init() -> Self {
+        let mut result = Self {
+            row: 0,
+            column: 0,
+            color_code: ColorCode::new(Color::White, Color::Black),
+        };
+        result.clear();
+        result
+    }
+
+    fn buffer(&mut self) -> &'static mut Buffer {
         // SAFETY: only one `Writer` should exist at one time
         unsafe { &mut *(0xb8000 as *mut Buffer) }
     }
@@ -108,8 +112,8 @@ impl Writer {
         if self.row + 1 == VGA_BUFFER_HEIGHT {
             for row in 0..VGA_BUFFER_HEIGHT - 1 {
                 for col in 0..VGA_BUFFER_WIDTH {
-                    let tmp = Self::buffer().chars[row + 1][col].read();
-                    Self::buffer().chars[row][col].write(tmp);
+                    let tmp = self.buffer().chars[row + 1][col].read();
+                    self.buffer().chars[row][col].write(tmp);
                 }
             }
         } else {
@@ -137,7 +141,7 @@ impl Writer {
 
     fn fill_row(&mut self, row: usize, fill: ScreenChar) {
         for col in 0..VGA_BUFFER_WIDTH {
-            Self::buffer().chars[row][col].write(fill);
+            self.buffer().chars[row][col].write(fill);
         }
     }
 }
@@ -154,7 +158,6 @@ impl Write for Writer {
 #[allow(unused)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(C)]
-
 pub enum Color {
     #[default]
     Black = 0,
@@ -164,8 +167,8 @@ pub enum Color {
     Red = 4,
     Magenta = 5,
     Brown = 6,
-    LightGray = 7,
-    DarkGray = 8,
+    LightGrey = 7,
+    DarkGrey = 8,
     LightBlue = 9,
     LightGreen = 10,
     LightCyan = 11,

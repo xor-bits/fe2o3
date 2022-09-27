@@ -1,19 +1,25 @@
 #![no_std]
 #![no_main]
+#![feature(try_blocks)]
 #![feature(abi_x86_interrupt)]
+#![feature(custom_test_frameworks)]
+#![test_runner(crate::test_fw::test_runner)]
+#![reexport_test_harness_main = "test_main"]
 
 //
 
-use int::init_idt;
+use raw_cpuid::CpuId;
 
-#[cfg(feature = "tests")]
-mod test_fw;
+pub static KERNEL_NAME: &str = if cfg!(test) { "Fe2O3-Testing" } else { "Fe2O3" };
 
-mod int;
-mod log;
-mod panic;
-mod serial;
-mod vga;
+//
+
+pub mod int;
+pub mod log;
+pub mod panic;
+pub mod serial;
+pub mod test_fw;
+pub mod vga;
 
 //
 
@@ -21,16 +27,6 @@ mod vga;
 #[link_section = ".text"]
 pub fn kernel_main() {
     init();
-
-    #[cfg(feature = "tests")]
-    {
-        test_fw::test_runner(&[]);
-    }
-
-    // run app
-    /* for i in 0.. {
-        println!("Init {i}");
-    } */
 }
 
 pub fn init() {
@@ -41,20 +37,27 @@ pub fn init() {
     hello();
 
     // interrupt descriptor table
-    init_idt();
+    int::init_idt();
+
+    let cpuid = CpuId::new();
+
+    if let Some(vendor) = cpuid.get_vendor_info() {
+        debug!("CPU: {}", vendor.as_str());
+    }
+    if let Some(cparams) = cpuid.get_feature_info() {
+        debug!("Has APIC: {}", cparams.has_apic());
+    }
 
     // debug breakpoint exception
-    println!("Debug breakpoint coming up");
+    debug!("Debug breakpoint coming up");
     x86_64::instructions::interrupts::int3();
-    println!("Debug breakpoint worked");
+    debug!("Debug breakpoint worked");
 }
 
 pub fn hello() {
     // boot up message
-    #[cfg(feature = "tests")]
-    serial_println!("Hello from the Fe2O3 Testing kernel!");
-    #[cfg(not(feature = "tests"))]
-    println!("Hello from the Fe2O3 kernel!");
+    info!("Hello from the {KERNEL_NAME} kernel!");
+    serial_println!("Hello from the {KERNEL_NAME} kernel!");
 }
 
 pub fn halt() -> ! {

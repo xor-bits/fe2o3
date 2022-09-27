@@ -1,4 +1,5 @@
-use core::fmt::{self, Write};
+use crate::error;
+use core::fmt::{Arguments, Error, Write};
 use lazy_static::lazy_static;
 use spin::Mutex;
 use uart_16550::SerialPort;
@@ -22,19 +23,27 @@ macro_rules! serial_print {
 
 #[macro_export]
 macro_rules! serial_println {
-    () => {
-		$crate::serial_print!("\n");
-	};
-
-    ($fmt:expr, $($arg:tt)*) => {
-		$crate::serial_print!(concat!($fmt, "\n"), $($arg)*);
-	};
+    ($($arg:tt)*) => {
+        $crate::serial::_println(format_args!($($arg)*));
+    };
 }
 
-#[doc(hidden)]
-pub fn _print(args: fmt::Arguments) {
-    SERIAL1
-        .lock()
-        .write_fmt(args)
-        .expect("Printing to serial failed");
+pub fn _print(args: Arguments) {
+    let mut writer = SERIAL1.lock();
+    if let Err::<(), Error>(_) = try {
+        writer.write_fmt(args)?;
+        writer.write_char('\n')?;
+    } {
+        error!("Failed to write to serial");
+    }
+}
+
+pub fn _println(args: Arguments) {
+    let mut writer = SERIAL1.lock();
+    if let Err::<(), Error>(_) = try {
+        writer.write_fmt(args)?;
+        writer.write_char('\n')?;
+    } {
+        error!("Failed to write to serial");
+    }
 }

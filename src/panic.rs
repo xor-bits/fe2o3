@@ -5,7 +5,7 @@ use core::panic::PanicInfo;
 #[cfg(not(feature = "tests"))]
 #[panic_handler]
 fn panic_handler(info: &PanicInfo) -> ! {
-    crate::println!("{}", info);
+    crate::error!("{}", info);
     crate::halt()
 }
 

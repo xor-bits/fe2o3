@@ -1,51 +1,43 @@
-boot_source_files := $(shell find boot -name *.asm)
-boot_object_files := $(patsubst boot/%.asm, build/%.o, $(boot_source_files))
+KERNEL_LIB      = target/boot/libfe2o3.a
+KERNEL_BIN      = target/boot/kernel.bin
+KERNEL_LIB_DEPS = $(filter-out %: ,$(file < target/x86_64-unknown-none/release/libfe2o3.d)) Cargo.toml Cargo.lock
+OS_ISO          = target/boot/fe2o3.iso
+LD_SCRIPT       = linker.ld
 
-$(boot_object_files): build/%.o : boot/%.asm Makefile
-	mkdir -p $(dir $@)
-	nasm -f elf64 $(patsubst build/%.o, boot/%.asm, $@) -o $@
+BOOT_SOURCE     = $(shell find src/boot -name *.asm)
+BOOT_OBJECT     = $(patsubst src/boot/%.asm, target/boot/%.o, $(BOOT_SOURCE))
 
-#
 
-build/libfe2o3.a: Cargo.lock Cargo.toml src/** Makefile
-	mkdir -p build
-	cargo build --release --target-dir=build/target/
-	cp build/target/x86_64-unknown-none/release/libfe2o3.a $@
 
-build/kernel.bin: linker.ld $(boot_object_files) build/libfe2o3.a Makefile
-	mkdir -p build
-	ld -m elf_x86_64 --gc-sections -T $< -o $@ $(boot_object_files) build/libfe2o3.a 
+.PHONY: run clean
 
-build/fe2o3.iso: build/kernel.bin Makefile
-	cp $< iso/boot/kernel.bin
-	grub-mkrescue /usr/lib/grub/i386-pc -o $@ iso
+# compile assembly
+$(BOOT_OBJECT): $(BOOT_SOURCE) Makefile
+	@mkdir -p $(dir $@)
+	@nasm -f elf64 $(patsubst target/boot/%.o, src/boot/%.asm, $@) -o $@
 
-#
+# compile rust
+$(KERNEL_LIB): $(KERNEL_LIB_DEPS) Makefile
+	@echo "Compile kernel library"
+	@mkdir -p $(shell dirname $(KERNEL_BIN))
+	@cargo build --release
+	@cp target/x86_64-unknown-none/release/libfe2o3.a $@
 
-build/libfe2o3-tests.a: Cargo.lock Cargo.toml src/** Makefile
-	mkdir -p build
-	cargo build --release --target-dir=build/target-tests/ --features=tests
-	cp build/target-tests/x86_64-unknown-none/release/libfe2o3.a $@
+# link
+$(KERNEL_BIN): $(KERNEL_LIB) $(BOOT_OBJECT) $(LD_SCRIPT) Makefile
+	@echo "Compile kernel binary"
+	@ld -m elf_x86_64 --gc-sections -T $(LD_SCRIPT) -o $@ $(BOOT_OBJECT) $(KERNEL_LIB)
 
-build/kernel-tests.bin: linker.ld $(boot_object_files) build/libfe2o3-tests.a Makefile
-	mkdir -p build
-	ld -m elf_x86_64 --gc-sections -T $< -o $@ $(boot_object_files) build/libfe2o3-tests.a
+# generate iso
+$(OS_ISO): $(KERNEL_BIN) Makefile
+	@echo "Generate os iso"
+	@cp $(KERNEL_BIN) iso/boot/kernel.bin
+	@grub-mkrescue /usr/lib/grub/i386-pc -o $@ iso
 
-build/fe2o3-tests.iso: build/kernel-tests.bin Makefile
-	cp $< iso/boot/kernel.bin
-	grub-mkrescue /usr/lib/grub/i386-pc -o $@ iso
+# acts
 
-#
+run: $(OS_ISO) Makefile
+	@qemu-system-x86_64 $<
 
-.PHONY: run
-run: build/fe2o3.iso Makefile
-	qemu-system-x86_64 $<
-
-.PHONY: test
-test: build/fe2o3-tests.iso Makefile
-	qemu-system-x86_64 $< -device isa-debug-exit,iobase=0xf4,iosize=0x04 -serial stdio -display none --no-reboot
-
-.PHONY: clean
 clean:
-	rm -rf build/
-	rm -rf target/
+	@rm -rf target/

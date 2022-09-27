@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
+opt-level = "s"
 panic = "abort"
 
 [profile.dev]
@@ -28,3 +29,4 @@ x86_64 = "0.14.9"
 uart_16550 = "0.2.10"
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
 pic8259 = "0.10.2"
+raw-cpuid = "10.6.0"
